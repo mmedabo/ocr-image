@@ -28,7 +28,22 @@ The model (~1 GB) downloads automatically from the Hugging Face Hub on
 first run. A GPU is used automatically if available, otherwise it runs on
 CPU.
 
-## Usage
+## Web UI
+
+A minimal, immersive single-page app for drag-and-drop scanning:
+
+```bash
+python app.py
+# open http://localhost:5000
+```
+
+Drop a receipt/warranty image, hit **Scan**, and the extracted fields
+appear as cards. The first scan takes longer because the model loads on
+demand; subsequent scans are fast. All processing happens locally — the
+image is held only in a temp file for the duration of the request and then
+deleted.
+
+## Command line
 
 ```bash
 # Print the extracted fields as JSON
