@@ -33,15 +33,27 @@ branch_ → Branch: `main` / `/ (root)`**. The site is served from
 
 ### Using the Donut model from the web app
 
-The original **Donut** model can be hosted for free on a Hugging Face
-**Gradio** Space (no Docker, no Pro) — see
-[`deploy/huggingface/`](deploy/huggingface/) for the ready-to-upload
-`app.py`, `requirements.txt`, and `README.md`. That Space is a standalone
-Donut scanner on its own URL.
+The static web app runs Tesseract in the browser. To use the more accurate
+**Donut** model instead, run it as a backend and point the app at it.
 
-To instead run Donut behind the Flask API and have this web app call it,
-deploy `app.py` from the repo root to any Python host and set `BACKEND_URL`
-near the top of `index.html` to that URL, e.g.:
+**Free option — Google Colab** (real Donut, live while the notebook runs):
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mmedabo/ocr-image/blob/main/deploy/colab/donut_backend.ipynb)
+
+Run [`deploy/colab/donut_backend.ipynb`](deploy/colab/donut_backend.ipynb):
+it loads Donut, starts the Flask API, and prints a public
+`https://….trycloudflare.com` URL (free Cloudflare quick tunnel, no
+account needed). Open that URL directly for the UI, or set it as
+`BACKEND_URL`.
+
+**Always-on option — Hugging Face Space:** the ready-to-upload Gradio files
+are in [`deploy/huggingface/`](deploy/huggingface/). Note that HF now
+requires a **paid (PRO) plan** for Gradio/Docker Spaces; only Static Spaces
+are free, and those can't run Python. Any other Python host (Fly.io,
+Railway, Render, a VPS) works too.
+
+Once you have a backend URL, set `BACKEND_URL` near the top of
+`index.html`, e.g.:
 
 ```javascript
 const BACKEND_URL = "https://mmedabo-ocr-image.hf.space";
