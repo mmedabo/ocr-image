@@ -33,10 +33,15 @@ branch_ → Branch: `main` / `/ (root)`**. The site is served from
 
 ### Using the Donut model from the web app
 
-The web app can call the original **Donut** model instead of Tesseract by
-pointing it at a backend that runs `app.py`. Deploy that backend to a
-Hugging Face Space (see [`deploy/huggingface/`](deploy/huggingface/)),
-then set `BACKEND_URL` near the top of `index.html` to the Space URL, e.g.:
+The original **Donut** model can be hosted for free on a Hugging Face
+**Gradio** Space (no Docker, no Pro) — see
+[`deploy/huggingface/`](deploy/huggingface/) for the ready-to-upload
+`app.py`, `requirements.txt`, and `README.md`. That Space is a standalone
+Donut scanner on its own URL.
+
+To instead run Donut behind the Flask API and have this web app call it,
+deploy `app.py` from the repo root to any Python host and set `BACKEND_URL`
+near the top of `index.html` to that URL, e.g.:
 
 ```javascript
 const BACKEND_URL = "https://mmedabo-ocr-image.hf.space";

@@ -1,31 +1,39 @@
 ---
-title: OCR Image Donut Backend
+title: OCR Image Donut
 emoji: 🧾
 colorFrom: green
 colorTo: blue
-sdk: docker
-app_port: 7860
+sdk: gradio
+app_file: app.py
 pinned: false
 ---
 
-# OCR Image — Donut backend
+# OCR Image — Donut receipt scanner
 
-This Space runs the original Donut receipt model (`app.py` + `ocr_receipt.py`)
-as an HTTP API for the [ocr-image](https://github.com/mmedabo/ocr-image)
-GitHub Pages frontend.
+Runs the Donut receipt model to extract key fields (device ID, model
+number, warranty/receipt number, dates, manufacturer) from a receipt or
+warranty image.
 
-- `POST /scan` with form field `image` → `{ "fields": {...}, "raw": {...} }`
-- `GET /` → the same UI, served directly from the Space
+Companion to the [ocr-image](https://github.com/mmedabo/ocr-image) repo.
+Runs on the **free** Gradio CPU tier — no Docker, no Pro.
 
-The first request downloads the model (~1 GB) and is slow; later requests
-are fast while the Space stays warm.
+## Deploy (free)
 
-## Deploy
+1. Create a new Space at <https://huggingface.co/new-space>:
+   - **SDK: Gradio** (the free SDK — *not* the "Gradio-Lite" static
+     template, and not Docker)
+   - **Hardware: CPU basic · Free**
+   - **Visibility: Public**
+   - Name it `ocr-image`.
+2. Upload the three files from this folder to the Space repo root:
+   `app.py`, `requirements.txt`, and this `README.md`.
+3. Wait for the build. The first scan downloads the model (~1 GB) and is
+   slow; later scans are fast while the Space stays awake.
 
-1. Create a new **Docker** Space at <https://huggingface.co/new-space>
-   (name it `ocr-image` to match the frontend's default URL).
-2. Upload the two files from this folder (`Dockerfile` and this `README.md`)
-   to the Space repo root.
-3. Wait for the build. Your API base URL will be
-   `https://<username>-ocr-image.hf.space`.
-4. Put that URL in `index.html` (`BACKEND_URL`) in the GitHub repo.
+Your app will be live at `https://<username>-ocr-image.hf.space`.
+
+## API
+
+The Space also exposes an API (see the "Use via API" link at the bottom of
+the Space page), so the GitHub Pages frontend can call it if you want to
+wire the two together.
