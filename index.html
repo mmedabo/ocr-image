@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipt Scanner</title>
+  <meta name="description" content="Scan a receipt or warranty image and extract its key details, entirely in your browser." />
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --panel: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #e8eaf0;
+      --muted: #7c8296;
+      --accent: #6ee7b7;
+      --accent-2: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;
+    }
+    .aura {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(600px circle at 20% 15%, rgba(56, 189, 248, 0.14), transparent 45%),
+        radial-gradient(700px circle at 85% 80%, rgba(110, 231, 183, 0.12), transparent 45%),
+        radial-gradient(500px circle at 60% 40%, rgba(139, 92, 246, 0.10), transparent 50%);
+      animation: drift 16s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes drift {
+      from { transform: translate3d(-2%, -1%, 0) scale(1); }
+      to   { transform: translate3d(2%, 2%, 0) scale(1.08); }
+    }
+    main {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 640px;
+      padding: 64px 24px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    header { text-align: center; }
+    header h1 {
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+
+    .drop {
+      border: 1.5px dashed var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+      padding: 44px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s, transform .2s;
+      backdrop-filter: blur(12px);
+    }
+    .drop:hover, .drop.drag {
+      border-color: var(--accent);
+      background: rgba(110, 231, 183, 0.06);
+      transform: translateY(-1px);
+    }
+    .drop svg { width: 40px; height: 40px; stroke: var(--muted); margin-bottom: 12px; }
+    .drop .big { font-size: 16px; font-weight: 500; }
+    .drop .small { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .drop img.preview {
+      max-height: 220px; max-width: 100%; border-radius: 12px;
+      margin-bottom: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    }
+
+    button.scan {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #04120c;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    button.scan:hover { opacity: .92; }
+    button.scan:active { transform: scale(.99); }
+    button.scan:disabled { opacity: .4; cursor: not-allowed; }
+
+    .status { text-align: center; color: var(--muted); font-size: 14px; min-height: 20px; }
+    .spinner {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      display: inline-block; vertical-align: middle; margin-right: 8px;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .results { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      backdrop-filter: blur(12px);
+      animation: rise .4s ease both;
+    }
+    .card.full { grid-column: 1 / -1; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .card .label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .card .value { font-size: 16px; font-weight: 500; word-break: break-word; }
+    .card .value.empty { color: var(--muted); font-weight: 400; font-style: italic; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: var(--accent-2);
+      padding: 4px 10px; border-radius: 999px; font-size: 13px;
+    }
+    .error { color: #fca5a5; }
+    .hidden { display: none; }
+
+    details.raw {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(12px);
+    }
+    details.raw summary {
+      cursor: pointer; color: var(--muted); font-size: 13px; user-select: none;
+    }
+    details.raw pre {
+      margin-top: 12px; white-space: pre-wrap; word-break: break-word;
+      font-size: 12px; color: var(--text); line-height: 1.5;
+      max-height: 260px; overflow: auto;
+    }
+    footer {
+      position: relative; z-index: 1; color: var(--muted);
+      font-size: 12px; padding: 0 24px 40px; text-align: center; max-width: 640px;
+    }
+    footer a { color: var(--accent-2); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="aura"></div>
+  <main>
+    <header>
+      <h1>Receipt Scanner</h1>
+      <p>Drop a receipt or warranty image to extract its key details.</p>
+    </header>
+
+    <div class="drop" id="drop">
+      <img class="preview hidden" id="preview" alt="preview" />
+      <div id="dropText">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <div class="big">Click or drag an image here</div>
+        <div class="small">JPG, PNG, WEBP — processed on your device</div>
+      </div>
+    </div>
+    <input type="file" id="file" accept="image/*" class="hidden" />
+
+    <button class="scan" id="scan" disabled>Scan receipt</button>
+    <div class="status" id="status"></div>
+    <div class="results hidden" id="results"></div>
+
+    <details class="raw hidden" id="rawWrap">
+      <summary>Show raw OCR text</summary>
+      <pre id="rawText"></pre>
+    </details>
+  </main>
+
+  <footer>
+    100% in-browser OCR — your image never leaves your device.
+    Powered by <a href="https://tesseract.projectnaptha.com/" target="_blank" rel="noopener">Tesseract.js</a>.
+  </footer>
+
+  <script>
+    const drop = document.getElementById('drop');
+    const fileInput = document.getElementById('file');
+    const preview = document.getElementById('preview');
+    const dropText = document.getElementById('dropText');
+    const scanBtn = document.getElementById('scan');
+    const statusEl = document.getElementById('status');
+    const results = document.getElementById('results');
+    const rawWrap = document.getElementById('rawWrap');
+    const rawText = document.getElementById('rawText');
+
+    let currentFile = null;
+
+    const FIELDS = [
+      ['device_id', 'Device ID'],
+      ['model_number', 'Model Number'],
+      ['warranty_number', 'Warranty Number'],
+      ['receipt_number', 'Receipt Number'],
+      ['manufacturer', 'Manufacturer'],
+      ['service_provider', 'Service Provider'],
+    ];
+
+    // Keyword -> field. Order matters: more specific keywords first.
+    const FIELD_KEYWORDS = {
+      device_id: ['device id', 'device no', 'device number', 'imei', 'serial no', 'serial number', 'serial', 's/n', 'sn'],
+      model_number: ['model number', 'model no', 'model #', 'model'],
+      warranty_number: ['warranty number', 'warranty no', 'warranty #', 'warranty'],
+      receipt_number: ['receipt number', 'receipt no', 'receipt #', 'invoice number', 'invoice no', 'invoice #', 'order number', 'order no', 'transaction id', 'transaction no', 'transaction'],
+      manufacturer: ['manufacturer', 'manufactured by', 'brand', 'make'],
+      service_provider: ['service provider', 'provider', 'retailer', 'store', 'sold by'],
+    };
+
+    const DATE_PATTERNS = [
+      /\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/g,
+      /\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/g,
+      /\b\d{1,2}[ \t]+[A-Za-z]{3,9}\.?[ \t]+\d{2,4}\b/g,
+      /\b[A-Za-z]{3,9}\.?[ \t]+\d{1,2},?[ \t]+\d{2,4}\b/g,
+    ];
+
+    function extractFields(text) {
+      const result = {
+        device_id: null, model_number: null, warranty_number: null,
+        receipt_number: null, manufacturer: null, service_provider: null, dates: [],
+      };
+      const lines = text.split(/\r?\n/);
+
+      for (const [field, keywords] of Object.entries(FIELD_KEYWORDS)) {
+        for (const kw of keywords) {
+          if (result[field]) break;
+          // ID-like fields capture a token; name-like fields capture the rest of the line.
+          const nameLike = field === 'manufacturer' || field === 'service_provider';
+          const cap = nameLike ? '(.+)' : '([A-Za-z0-9][A-Za-z0-9\\-\\/]{2,})';
+          const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[:#\\-]?\\s*' + cap, 'i');
+          for (const line of lines) {
+            const m = line.match(re);
+            if (m && m[1]) {
+              let v = m[1].trim().replace(/\s{2,}/g, ' ');
+              if (nameLike) v = v.replace(/[.,;:]+$/, '').trim();
+              if (v) { result[field] = v; break; }
+            }
+          }
+        }
+      }
+
+      const dates = [];
+      for (const pat of DATE_PATTERNS) {
+        const matches = text.match(pat) || [];
+        for (const d of matches) if (!dates.includes(d)) dates.push(d);
+      }
+      result.dates = dates;
+      return result;
+    }
+
+    function setFile(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      currentFile = file;
+      preview.src = URL.createObjectURL(file);
+      preview.classList.remove('hidden');
+      dropText.classList.add('hidden');
+      scanBtn.disabled = false;
+      results.classList.add('hidden');
+      results.innerHTML = '';
+      rawWrap.classList.add('hidden');
+      statusEl.textContent = '';
+    }
+
+    drop.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => setFile(e.target.files[0]));
+    ['dragenter', 'dragover'].forEach(ev =>
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+    drop.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+
+    scanBtn.addEventListener('click', async () => {
+      if (!currentFile) return;
+      scanBtn.disabled = true;
+      results.classList.add('hidden');
+      results.innerHTML = '';
+      rawWrap.classList.add('hidden');
+      statusEl.innerHTML = '<span class="spinner"></span>Loading OCR engine…';
+
+      try {
+        const { data } = await Tesseract.recognize(currentFile, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              statusEl.innerHTML = '<span class="spinner"></span>Reading receipt… ' +
+                Math.round((m.progress || 0) * 100) + '%';
+            } else if (m.status) {
+              statusEl.innerHTML = '<span class="spinner"></span>' +
+                m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+            }
+          },
+        });
+        const text = data.text || '';
+        render(extractFields(text));
+        rawText.textContent = text.trim() || '(no text detected)';
+        rawWrap.classList.remove('hidden');
+        statusEl.textContent = '';
+      } catch (err) {
+        statusEl.innerHTML = '<span class="error">' + escapeHtml(err.message || String(err)) + '</span>';
+      } finally {
+        scanBtn.disabled = false;
+      }
+    });
+
+    function card(label, valueHtml, full) {
+      return `<div class="card${full ? ' full' : ''}">
+        <div class="label">${label}</div>
+        <div class="value">${valueHtml}</div>
+      </div>`;
+    }
+
+    function render(fields) {
+      let html = '';
+      for (const [key, label] of FIELDS) {
+        const v = fields[key];
+        html += card(label, v ? escapeHtml(v) : '<span class="empty">not found</span>');
+      }
+      const dates = fields.dates || [];
+      const datesHtml = dates.length
+        ? '<div class="chips">' + dates.map(d => `<span class="chip">${escapeHtml(d)}</span>`).join('') + '</div>'
+        : '<span class="empty">not found</span>';
+      html += card('Dates', datesHtml, true);
+      results.innerHTML = html;
+      results.classList.remove('hidden');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+  </script>
+</body>
+</html>
