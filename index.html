@@ -205,6 +205,11 @@
 
     let currentFile = null;
 
+    // Point this at your deployed Donut backend (e.g. a Hugging Face Space)
+    // to run the original model. Leave "" to do OCR entirely in the browser.
+    //   e.g. "https://mmedabo-ocr-image.hf.space"
+    const BACKEND_URL = "";
+
     const FIELDS = [
       ['device_id', 'Device ID'],
       ['model_number', 'Model Number'],
@@ -292,23 +297,22 @@
       results.classList.add('hidden');
       results.innerHTML = '';
       rawWrap.classList.add('hidden');
-      statusEl.innerHTML = '<span class="spinner"></span>Loading OCR engine…';
 
       try {
-        const { data } = await Tesseract.recognize(currentFile, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              statusEl.innerHTML = '<span class="spinner"></span>Reading receipt… ' +
-                Math.round((m.progress || 0) * 100) + '%';
-            } else if (m.status) {
-              statusEl.innerHTML = '<span class="spinner"></span>' +
-                m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
-            }
-          },
-        });
-        const text = data.text || '';
-        render(extractFields(text));
-        rawText.textContent = text.trim() || '(no text detected)';
+        let fields, raw;
+        if (BACKEND_URL) {
+          statusEl.innerHTML = '<span class="spinner"></span>Scanning with the Donut model…';
+          try {
+            ({ fields, raw } = await scanWithBackend(currentFile));
+          } catch (e) {
+            statusEl.innerHTML = '<span class="spinner"></span>Backend unavailable — using in-browser OCR…';
+            ({ fields, raw } = await scanWithTesseract(currentFile));
+          }
+        } else {
+          ({ fields, raw } = await scanWithTesseract(currentFile));
+        }
+        render(fields);
+        rawText.textContent = (raw || '').trim() || '(no text detected)';
         rawWrap.classList.remove('hidden');
         statusEl.textContent = '';
       } catch (err) {
@@ -317,6 +321,35 @@
         scanBtn.disabled = false;
       }
     });
+
+    // Original Donut logic, running on the remote backend.
+    async function scanWithBackend(file) {
+      const form = new FormData();
+      form.append('image', file);
+      const res = await fetch(BACKEND_URL.replace(/\/$/, '') + '/scan', {
+        method: 'POST', body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Backend request failed');
+      return { fields: data.fields, raw: JSON.stringify(data.raw || {}, null, 2) };
+    }
+
+    // In-browser fallback: Tesseract.js OCR + the JS field extractor.
+    async function scanWithTesseract(file) {
+      const { data } = await Tesseract.recognize(file, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            statusEl.innerHTML = '<span class="spinner"></span>Reading receipt… ' +
+              Math.round((m.progress || 0) * 100) + '%';
+          } else if (m.status) {
+            statusEl.innerHTML = '<span class="spinner"></span>' +
+              m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…';
+          }
+        },
+      });
+      const text = data.text || '';
+      return { fields: extractFields(text), raw: text };
+    }
 
     function card(label, valueHtml, full) {
       return `<div class="card${full ? ' full' : ''}">

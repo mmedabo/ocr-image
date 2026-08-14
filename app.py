@@ -21,6 +21,15 @@ import ocr_receipt
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB uploads
 
+# Allow the static GitHub Pages frontend (a different origin) to call /scan.
+# Optional: the app still runs if flask-cors isn't installed.
+try:
+    from flask_cors import CORS
+
+    CORS(app)
+except ImportError:
+    pass
+
 ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"}
 
 

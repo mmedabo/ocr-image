@@ -31,6 +31,21 @@ Repo **Settings → Pages → Build and deployment → Source: _Deploy from a
 branch_ → Branch: `main` / `/ (root)`**. The site is served from
 `index.html` at the repo root.
 
+### Using the Donut model from the web app
+
+The web app can call the original **Donut** model instead of Tesseract by
+pointing it at a backend that runs `app.py`. Deploy that backend to a
+Hugging Face Space (see [`deploy/huggingface/`](deploy/huggingface/)),
+then set `BACKEND_URL` near the top of `index.html` to the Space URL, e.g.:
+
+```javascript
+const BACKEND_URL = "https://mmedabo-ocr-image.hf.space";
+```
+
+When set, the app uploads the image to that backend and shows the Donut
+parse. If the backend is unreachable (e.g. the Space is asleep), it
+automatically falls back to in-browser Tesseract, so the page always works.
+
 ## Local version (Python + Donut)
 
 How it works:
