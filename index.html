@@ -205,10 +205,12 @@
 
     let currentFile = null;
 
-    // Point this at your deployed Donut backend (e.g. a Hugging Face Space)
-    // to run the original model. Leave "" to do OCR entirely in the browser.
-    //   e.g. "https://mmedabo-ocr-image.hf.space"
-    const BACKEND_URL = "";
+    // Point this at your deployed Donut backend to run the original model.
+    // Leave "" to do OCR entirely in the browser (Tesseract).
+    // Colab tunnel URLs change on every restart — update this when you re-run
+    // the notebook. If the backend is unreachable, the app falls back to
+    // in-browser Tesseract automatically.
+    const BACKEND_URL = "https://intervals-editorial-rica-sharon.trycloudflare.com";
 
     const FIELDS = [
       ['device_id', 'Device ID'],
