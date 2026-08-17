@@ -269,6 +269,26 @@
         for (const d of matches) if (!dates.includes(d)) dates.push(d);
       }
       result.dates = dates;
+
+      // Fallback for unlabeled device / product labels (no "Model:" etc.).
+      // If nothing labeled was found, guess from token shapes:
+      //   model number  = a token mixing letters AND digits (e.g. CTC39S03NI)
+      //   device id      = a long run of digits (e.g. a barcode / serial)
+      const nothingLabeled = !result.device_id && !result.model_number &&
+        !result.warranty_number && !result.receipt_number;
+      if (nothingLabeled) {
+        let best = null;
+        for (const t of text.split(/\s+/)) {
+          const clean = t.replace(/[^A-Za-z0-9-]/g, '');
+          if (clean.length >= 5 && /[A-Za-z]/.test(clean) && /[0-9]/.test(clean)) {
+            if (!best || clean.length > best.length) best = clean;
+          }
+        }
+        if (best) result.model_number = best;
+        const nums = (text.match(/\b\d{8,}\b/g) || []).sort((a, b) => b.length - a.length);
+        if (nums.length) result.device_id = nums[0];
+      }
+
       return result;
     }
 
@@ -306,6 +326,12 @@
           statusEl.innerHTML = '<span class="spinner"></span>Scanning with the Donut model…';
           try {
             ({ fields, raw } = await scanWithBackend(currentFile));
+            // Donut is tuned for receipts; if it finds nothing (e.g. a device
+            // label), fall back to in-browser OCR + shape heuristics.
+            if (isEmptyFields(fields)) {
+              statusEl.innerHTML = '<span class="spinner"></span>No receipt fields — reading text directly…';
+              ({ fields, raw } = await scanWithTesseract(currentFile));
+            }
           } catch (e) {
             statusEl.innerHTML = '<span class="spinner"></span>Backend unavailable — using in-browser OCR…';
             ({ fields, raw } = await scanWithTesseract(currentFile));
@@ -324,6 +350,14 @@
       }
     });
 
+    // True when the parse produced no usable fields at all.
+    function isEmptyFields(f) {
+      if (!f) return true;
+      const keys = ['device_id', 'model_number', 'warranty_number',
+        'receipt_number', 'manufacturer', 'service_provider'];
+      return keys.every(k => !f[k]) && (!f.dates || f.dates.length === 0);
+    }
+
     // Original Donut logic, running on the remote backend.
     async function scanWithBackend(file) {
       const form = new FormData();
@@ -341,7 +375,7 @@
       const { data } = await Tesseract.recognize(file, 'eng', {
         logger: m => {
           if (m.status === 'recognizing text') {
-            statusEl.innerHTML = '<span class="spinner"></span>Reading receipt… ' +
+            statusEl.innerHTML = '<span class="spinner"></span>Reading text… ' +
               Math.round((m.progress || 0) * 100) + '%';
           } else if (m.status) {
             statusEl.innerHTML = '<span class="spinner"></span>' +
